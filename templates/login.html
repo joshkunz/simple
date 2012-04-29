@@ -1,0 +1,10 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ config.BLOG_TITLE }}{% endblock %}
+{% block content %}
+<form method="post" action="{{ url_for("login_logout") }}">
+    Username: <input type="text" name="username" />
+    Password: <input type="password" name="password" />
+    <input type="submit" value="Submit" />
+</form>
+{% endblock %}

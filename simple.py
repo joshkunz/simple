@@ -1,6 +1,6 @@
 from functools import wraps
 import hashlib
-from flask import render_template, request, Flask, flash, redirect, url_for, abort, jsonify, Response, make_response
+from flask import render_template, request, Flask, flash, redirect, url_for, abort, jsonify, Response, make_response, session
 import re
 from unicodedata import normalize
 from flaskext.sqlalchemy import SQLAlchemy
@@ -10,6 +10,7 @@ import markdown
 from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
+app.debug = True
 app.config.from_object('settings')
 db = SQLAlchemy(app)
 
@@ -34,16 +35,43 @@ try:
 except Exception:
     pass
 
+def generate_password_hash(password, username):
+	pass_hash = hashlib.sha1(password).hexdigest()
+	user_hash = hashlib.sha1(username).hexdigest()
+	return "|".join((pass_hash, user_hash))
+
+def is_admin(test=None):
+	if test is None: test = session.get("token")
+	conf_hash = generate_password_hash(app.config["ADMIN_PASSWORD"],
+									   app.config["ADMIN_USERNAME"])
+	return conf_hash == test
+
 def requires_authentication(f):
     @wraps(f)
     def _auth_decorator(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not (auth.username == app.config["ADMIN_USERNAME"]
-                            and check_password_hash(app.config["ADMIN_PASSWORD"], auth.password)):
-            return Response("Could not authenticate you", 401, {"WWW-Authenticate":'Basic realm="Login Required"'})
+        if (generate_password_hash(app.config["ADMIN_PASSWORD"],
+								   app.config["ADMIN_USERNAME"])
+								   != session.get("token")):
+			return Response("Could not authenticate you", 403)
         return f(*args, **kwargs)
 
     return _auth_decorator
+
+@app.route("/logout")
+@app.route("/login", methods=["GET", "POST"])
+def login_logout():
+	if session.get("token"):
+		del session["token"]
+		return redirect(url_for("index"))
+	elif request.method == "GET":
+		return render_template("login.html", now=datetime.datetime.now())
+	elif request.method == "POST":
+		login_hash = generate_password_hash(request.form["password"],
+											request.form["username"])
+		if is_admin(login_hash):
+			session["token"] = login_hash
+			return redirect(url_for("admin"))
+		return make_response("Invalid Login", 403)
 
 @app.route("/")
 def index():
